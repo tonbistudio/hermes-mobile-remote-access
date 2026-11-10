@@ -1,16 +1,18 @@
 ---
 name: hermes-mobile-remote-access
-description: Use when connecting phone apps to Hermes over Tailscale.
+description: Use when connecting phone apps to a remote Hermes.
 version: 2.0.0
 author: Hermes Agent
 license: MIT
 metadata:
   hermes:
-    tags: [tailscale, mobile, webapp, gateway, dashboard, serve, ssh, windows, linux]
+    tags: [tailscale, mobile, webapp, gateway, dashboard, serve, reverse-proxy, lan, ssh, windows, linux]
     related_skills: [hermes-agent]
 ---
 
-# Hermes mobile remote access (gateway Webapp over Tailscale)
+# Hermes mobile remote access (gateway Webapp)
+
+Tailscale is the recommended network and the default path below. Nothing in Hermes requires it: see "Without Tailscale" for LAN, other VPNs and reverse proxies/tunnels.
 
 ## When to Use
 - **First-time setup:** a user wants the Hermes mobile app (or a phone/laptop browser) to reach Hermes on another machine.
@@ -61,6 +63,24 @@ Answer the literal question first ("server is X, username Y"), then fix. Users d
 - `curl -s https://<host>.ts.net/api/status` → JSON with `auth_required: true` and `auth_providers` containing `"basic"`; `gateway_state: running`.
 - `curl -s -o /dev/null -w "%{http_code}" https://<host>.ts.net/` → `302` (redirect to sign-in).
 - These checks prove the server side only. Have the user confirm on the phone and ask for the exact error text if it fails.
+
+## Without Tailscale
+The Webapp is plain HTTP(S) on `webapp.host:webapp.port`; any network that reaches it works. Pick by how exposed it is:
+
+| Route | Config | Phone server | Sign-in |
+|---|---|---|---|
+| Home Wi-Fi / LAN | `webapp.host 0.0.0.0` (or `::`) | `http://<host-LAN-IP>:9120` | Username/password is acceptable on a trusted network |
+| Other VPN (WireGuard, ZeroTier, Nebula…) | `webapp.host 0.0.0.0` | `http://<host-VPN-IP>:9120` | Same as LAN |
+| Reverse proxy / tunnel (Caddy, nginx, Cloudflare Tunnel…) | keep `webapp.host 127.0.0.1`, proxy to `127.0.0.1:9120`, set `webapp.public_url https://<proxy-hostname>` | `https://<proxy-hostname>` | **OAuth** if internet-reachable; not username/password |
+
+Gotchas for these routes:
+- **Wildcard bind = every interface.** `0.0.0.0` listens on LAN, VPN and any other adapter. A wildcard bind turns sign-in on automatically; without a sign-in provider the gateway serves native clients only (`hermes webapp --status` says so).
+- **Firewall:** a wildcard bind needs an inbound rule for 9120, scoped to the network you mean. Windows (admin): `New-NetFirewallRule -DisplayName "Hermes Webapp" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 9120 -RemoteAddress <LAN-or-VPN-CIDR>`; Linux: `ufw allow from <CIDR> to any port 9120 proto tcp`. Windows also blocks the network if its profile is Public; set the trusted network to Private.
+- **Plain HTTP on LAN/VPN** sends the password and session cookie unencrypted on that network. That's fine for a WireGuard-style VPN (already encrypted), weaker on shared Wi-Fi. For HTTPS, use a reverse proxy.
+- **LAN IPs change** (DHCP). Give the host a DHCP reservation, or use its mDNS/LAN hostname.
+- **Reverse proxy:** the Webapp only accepts requests for the `webapp.public_url` hostname, and only trusts `X-Forwarded-*` headers from loopback plus the IPs/CIDRs in `dashboard.trusted_proxies`. Add the proxy's address there if it isn't on the same machine. The proxy must pass WebSocket upgrades (chat runs over a WebSocket): nginx needs `proxy_http_version 1.1` plus `Upgrade`/`Connection` headers; Caddy and Cloudflare Tunnel do this by default.
+- **Internet exposure:** Hermes's docs reserve username/password for trusted networks. For anything reachable from the internet (Cloudflare Tunnel, port-forward, public proxy), configure an OAuth/OIDC sign-in provider (see the web-dashboard docs) or put an access layer (e.g. Cloudflare Access) in front. Never port-forward 9120 directly on the router.
+- Changing `webapp.*` needs a gateway restart.
 
 ## Restarting from inside the gateway
 An agent chatting through the gateway (desktop app, Webapp, Slack…) dies with it on `hermes gateway restart`. Write a small script that sleeps ~20 s, runs the restart, polls `http://127.0.0.1:9120/api/status`, runs `hermes webapp --status`, and appends results to a log under the Hermes `logs/` dir. Launch it **detached** (Windows: `Start-Process powershell -WindowStyle Hidden -ArgumentList '-File',...`; Linux: `setsid nohup ... &`). Tell the user the chat drops for about a minute and to message you afterwards; then read the log and re-verify.

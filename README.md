@@ -20,15 +20,21 @@ It covers two cases:
 
 ## Gotchas it covers
 
+- Building the Webapp bundle before checking `--status`, and what each `hermes webapp --status` message means
+- `tailscale serve` silently replacing an existing 443 mapping, plus a full rollback procedure
+- Credentials stored in a systemd `Environment=` line or a separate `EnvironmentFile`
+- Agent-launched gateway restarts being refused, and transient units with no `PATH`
+- Both legacy mobile modes (direct 9119 URL and SSH tunnel) breaking when 9119 is retired
+- Multi-profile hosts with several gateway units, and harmless `Plugin 'basic'` warnings
 - Tailscale stuck "starting" after a reboot, and Tailscale restarts dropping the `serve` config
-- The gateway only starting at Windows logon, not at boot
+- The gateway only starting at Windows logon, not at boot; Linux lingering
 - `webapp.host` rejecting specific IPs; `dashboard.public_url` not applying to the Webapp
 - Firewall rules, Public vs Private networks on Windows, and DHCP address changes for LAN setups
 - Reverse proxies: `public_url` host matching, `dashboard.trusted_proxies`, and WebSocket upgrades
 - The old backend: Windows Firewall silently blocking Hermes's bundled Python, and dying when the desktop app closes
 - Setting a dashboard password (there's no CLI command for it)
 - "gateway error 4001" when reopening a session
-- SSH phone apps on Windows: `sshd` startup type and where admin accounts' keys go
+- SSH phone apps: `sshd` startup type and admin-account keys on Windows; safe `authorized_keys` edits and fingerprint checks on Linux
 
 ## Install
 
